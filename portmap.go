@@ -14,8 +14,8 @@ import "time"
 import "sync"
 import "strconv"
 import denet "github.com/hlandau/degoutils/net"
-import "github.com/hlandau/portmap/gateway"
-import "github.com/hlandau/portmap/ssdp"
+import "github.com/vjeantet/portmap/gateway"
+import "github.com/vjeantet/portmap/ssdp"
 
 // Identifies a transport layer protocol.
 type Protocol int
@@ -87,6 +87,7 @@ type Mapping interface {
 	// If the external port has been mapped but the external IP cannot be determined,
 	// returns ":port".
 	ExternalAddr() string
+	StopBroadcast()
 }
 
 const DefaultLifetime = 2 * time.Hour
@@ -180,6 +181,10 @@ type mapping struct {
 
 func (m *mapping) NotifyChan() <-chan struct{} {
 	return m.notifyChan
+}
+
+func (m *mapping) StopBroadcast() {
+	ssdp.StopBroadcast()
 }
 
 func (m *mapping) Delete() {

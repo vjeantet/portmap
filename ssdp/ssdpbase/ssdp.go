@@ -3,16 +3,20 @@
 // Use package ssdp instead of this package.
 package ssdpbase
 
-import gnet "net"
-import "time"
-import "github.com/hlandau/degoutils/net"
-import "net/http"
-import "bytes"
-import "net/url"
-import "bufio"
+import (
+	"bufio"
+	gnet "net"
+	"net/http"
+	"net/url"
+	"time"
+
+	"bytes"
+
+	"github.com/hlandau/degoutils/net"
+)
 
 // Interval at which discovery beacons are sent.
-const BroadcastInterval = 60 * time.Second
+const BroadcastInterval = 2 * time.Second
 
 // Represents a received SSDP beacon.
 type Event struct {
@@ -28,6 +32,8 @@ type Client interface {
 
 	// Stops the receiver.
 	Stop()
+
+	StopBroadcast()
 }
 
 type client struct {
@@ -40,6 +46,10 @@ func (c *client) Stop() {
 	close(c.stopChan)
 	close(c.eventChan)
 	c.conn.Close()
+}
+
+func (c *client) StopBroadcast() {
+	c.stopChan <- struct{}{}
 }
 
 func (c *client) Chan() <-chan Event {
@@ -113,7 +123,6 @@ func (c *client) recvLoop() {
 		if err != nil {
 			return
 		}
-
 		rbio := bufio.NewReader(bytes.NewReader(buf))
 		res, err := http.ReadResponse(rbio, nil)
 		if err == nil {

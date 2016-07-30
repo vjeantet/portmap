@@ -2,11 +2,15 @@
 // retrieval. You can use this package to discover services using SSDP.
 package ssdp
 
-import "net/url"
-import "github.com/hlandau/portmap/ssdp/ssdpbase"
-import "github.com/hlandau/degoutils/log"
-import "time"
-import "sync"
+import (
+	"net/url"
+	"sync"
+	"time"
+
+	"github.com/hlandau/degoutils/log"
+	"github.com/streamrail/concurrent-map"
+	"github.com/vjeantet/portmap/ssdp/ssdpbase"
+)
 
 // Describes a service discovered by SSDP.
 type Service struct {
@@ -21,38 +25,32 @@ type Service struct {
 
 	// The time at which a notice for this service was last seen.
 	LastSeen time.Time
+
+	m *sync.Mutex
 }
 
 var once sync.Once
 var client ssdpbase.Client
-var byUSN = map[string]*Service{}
+
+var byUSN = cmap.New()
+
+func StopBroadcast() {
+	client.StopBroadcast()
+}
 
 func loop() {
 	for ev := range client.Chan() {
-		if _, already := byUSN[ev.USN]; !already {
-			byUSN[ev.USN] = &Service{USN: ev.USN}
+
+		svc := &Service{
+			USN:      ev.USN,
+			m:        &sync.Mutex{},
+			ST:       ev.ST,
+			Location: ev.Location,
+			LastSeen: time.Now(),
 		}
 
-		svc := byUSN[ev.USN]
-		svc.ST = ev.ST
-		svc.Location = ev.Location
-		svc.LastSeen = time.Now()
-
-		//log.Info("Registering SSDP service: ", svc)
+		byUSN.SetIfAbsent(ev.USN, svc)
 	}
-}
-
-// Starts the SSDP discovery broadcast and notice reception process, if it has
-// not already started. You may call this function multiple times without
-// consequence.
-func Start() {
-	once.Do(func() {
-		var err error
-		client, err = ssdpbase.NewClient()
-		log.Panice(err)
-
-		go loop()
-	})
 }
 
 // Obtains a list of Services matching the provided Service Type string.
@@ -66,10 +64,27 @@ func Start() {
 // are not yielded by this function.
 func GetServicesByType(st string) (svcs []Service) {
 	limit := time.Now().Add(ssdpbase.BroadcastInterval * -3)
-	for _, v := range byUSN {
-		if v.ST == st && v.LastSeen.After(limit) {
-			svcs = append(svcs, *v)
+	vs := byUSN.Iter()
+	for tuple := range vs {
+		svc := tuple.Val.(*Service)
+		// svc.m.Lock()
+		if svc.ST == st && svc.LastSeen.After(limit) {
+			svcs = append(svcs, *svc)
 		}
+		// svc.m.Unlock()
 	}
 	return
+}
+
+// Starts the SSDP discovery broadcast and notice reception process, if it has
+// not already started. You may call this function multiple times without
+// consequence.
+func Start() {
+	once.Do(func() {
+		var err error
+		client, err = ssdpbase.NewClient()
+		log.Panice(err)
+
+		go loop()
+	})
 }

@@ -2,23 +2,17 @@ package portmap
 
 import "net"
 import "time"
-import "github.com/hlandau/portmap/ssdp"
-import "github.com/hlandau/portmap/upnp"
-import "github.com/hlandau/portmap/natpmp"
+import "github.com/vjeantet/portmap/ssdp"
+import "github.com/vjeantet/portmap/upnp"
+
 import "github.com/hlandau/xlog"
 
 var log, Log = xlog.New("portmap")
 
 type mode int
 
-const (
-	modeNATPMP mode = iota
-	modeUPnP
-)
-
 func (m *mapping) portMappingLoop(gwa []net.IP) {
 	aborting := false
-	mode := modeNATPMP
 	var ok bool
 	var d time.Duration
 	for {
@@ -27,32 +21,13 @@ func (m *mapping) portMappingLoop(gwa []net.IP) {
 			return
 		}
 
-		switch mode {
-		case modeNATPMP:
-			ok = m.tryNATPMP(gwa, aborting)
-			if ok {
-				d = m.cfg.Lifetime / 2
-			} else {
-				svc := ssdp.GetServicesByType(upnpWANIPConnectionURN)
-				if len(svc) > 0 {
-					// NAT-PMP failed and UPnP is available, so switch to it
-					mode = modeUPnP
-          log.Debug("NAT-PMP failed and UPnP is available, switching to UPnP")
-					continue
-				}
-			}
-
-		case modeUPnP:
-			svcs := ssdp.GetServicesByType(upnpWANIPConnectionURN)
-			if len(svcs) == 0 {
-				mode = modeNATPMP
-        log.Debug("UPnP not available, switching to NAT-PMP")
-				continue
-			}
-
-			ok = m.tryUPnP(svcs, aborting)
-			d = 1 * time.Hour
+		svcs := ssdp.GetServicesByType(upnpWANIPConnectionURN)
+		if len(svcs) == 0 {
+			continue
 		}
+
+		ok = m.tryUPnP(svcs, aborting)
+		d = 1 * time.Hour
 
 		// If we are aborting, then the call we just made was to remove the mapping,
 		// not set it, and we're done.
@@ -103,66 +78,6 @@ func (m *mapping) notify() {
 	case m.notifyChan <- struct{}{}:
 	default:
 	}
-}
-
-// NAT-PMP
-
-func (m *mapping) tryNATPMP(gwa []net.IP, destroy bool) bool {
-	for _, gw := range gwa {
-		if m.tryNATPMPGW(gw, destroy) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *mapping) tryNATPMPGW(gw net.IP, destroy bool) bool {
-	var externalPort uint16
-	var actualLifetime time.Duration
-	var err error
-
-	var preferredLifetime time.Duration
-	if destroy && !m.lIsActive() {
-		// no point destroying if we're not active
-		return true
-	} else if !destroy {
-		// lifetime is zero if we're destroying
-		preferredLifetime = m.cfg.Lifetime
-	}
-
-	// attempt mapping
-	externalPort, actualLifetime, err = natpmp.Map(gw,
-		natpmp.Protocol(m.cfg.Protocol), m.cfg.InternalPort, m.cfg.ExternalPort, preferredLifetime)
-	if err != nil {
-    log.Infof("NAT-PMP failed: %v", err)
-		return false
-	}
-
-	m.mutex.Lock()
-	m.cfg.ExternalPort = externalPort
-	m.cfg.Lifetime = actualLifetime
-	m.mutex.Unlock()
-	if preferredLifetime == 0 {
-		// we have finished tearing down the mapping by mapping it with a
-		// lifetime of zero, so return
-		return true
-	}
-
-	expireTime := time.Now().Add(actualLifetime)
-
-	// Now attempt to get the external IP.
-	extIP, err := natpmp.GetExternalAddr(gw)
-
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	// update external address
-	if err == nil {
-		m.externalAddr = extIP.String()
-	}
-
-	m.expireTime = expireTime
-	return true
 }
 
 // UPnP
