@@ -16,7 +16,7 @@ import (
 )
 
 // Interval at which discovery beacons are sent.
-const BroadcastInterval = 2 * time.Second
+const BroadcastInterval = 1 * time.Second
 
 // Represents a received SSDP beacon.
 type Event struct {
@@ -34,6 +34,7 @@ type Client interface {
 	Stop()
 
 	StopBroadcast()
+	StartBroadcast()
 }
 
 type client struct {
@@ -50,6 +51,11 @@ func (c *client) Stop() {
 
 func (c *client) StopBroadcast() {
 	c.stopChan <- struct{}{}
+}
+
+func (c *client) StartBroadcast() {
+	go c.broadcastLoop()
+	time.Sleep(BroadcastInterval * time.Second)
 }
 
 func (c *client) Chan() <-chan Event {

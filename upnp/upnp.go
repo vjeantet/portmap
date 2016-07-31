@@ -167,8 +167,11 @@ func determineSelfIP(u *url.URL) (gnet.IP, error) {
 	return uaddr.IP, nil
 }
 
-func randInRange(low, high uint16) uint16 {
-	return uint16(rand.Int31n(int32(high-low)) + int32(low))
+func randInRange(low, high int) uint16 {
+	rand.Seed(time.Now().Unix())
+	return uint16(rand.Intn(high-low) + low)
+
+	// return uint16(rand.Int31n(int32(high-low)) + int32(low))
 }
 
 // Performs a single UPnP transaction to map a port.

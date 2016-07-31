@@ -38,6 +38,10 @@ func StopBroadcast() {
 	client.StopBroadcast()
 }
 
+func StartBroadcast() {
+	client.StartBroadcast()
+}
+
 func loop() {
 	for ev := range client.Chan() {
 

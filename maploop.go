@@ -54,6 +54,7 @@ func (m *mapping) portMappingLoop(gwa []net.IP) {
 		select {
 		case <-m.abortChan:
 			aborting = true
+			m.tryUPnP(svcs, true)
 
 		case <-time.After(d):
 			// wait until we need to renew

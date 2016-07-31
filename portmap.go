@@ -88,6 +88,7 @@ type Mapping interface {
 	// returns ":port".
 	ExternalAddr() string
 	StopBroadcast()
+	StartBroadcast()
 }
 
 const DefaultLifetime = 2 * time.Hour
@@ -186,6 +187,9 @@ func (m *mapping) NotifyChan() <-chan struct{} {
 func (m *mapping) StopBroadcast() {
 	ssdp.StopBroadcast()
 }
+func (m *mapping) StartBroadcast() {
+	ssdp.StartBroadcast()
+}
 
 func (m *mapping) Delete() {
 	m.mutex.Lock()
@@ -196,6 +200,7 @@ func (m *mapping) Delete() {
 	}
 
 	close(m.abortChan)
+
 	m.aborted = true
 }
 
